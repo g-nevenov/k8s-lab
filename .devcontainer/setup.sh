@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Installs pinned kind, Helm 4 and make inside the dev container (never on the host).
 set -euo pipefail
 
 KIND_VERSION=v0.33.0
