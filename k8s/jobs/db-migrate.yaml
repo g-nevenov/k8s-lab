@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: lab
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: { app: db-migrate }
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:17
+          command: ["sh", "-c", "until pg_isready -h postgres -U \"$PGUSER\"; do echo waiting; sleep 2; done"]
+          env:
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: POSTGRES_USER } }
+      containers:
+        - name: migrate
+          image: postgres:17
+          command: ["sh", "-c", "for f in /migrations/*.sql; do psql -v ON_ERROR_STOP=1 -v api_password=\"$API_PASSWORD\" -v checker_password=\"$CHECKER_PASSWORD\" -f \"$f\" || exit 1; done"]
+          env:
+            - { name: PGHOST, value: postgres }
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: POSTGRES_USER } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: POSTGRES_PASSWORD } }
+            - name: PGDATABASE
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: POSTGRES_DB } }
+            - name: API_PASSWORD
+              valueFrom: { secretKeyRef: { name: db-roles, key: API_PASSWORD } }
+            - name: CHECKER_PASSWORD
+              valueFrom: { secretKeyRef: { name: db-roles, key: CHECKER_PASSWORD } }
+          volumeMounts:
+            - { name: migrations, mountPath: /migrations, readOnly: true }
+      volumes:
+        - name: migrations
+          configMap: { name: db-migrations }
